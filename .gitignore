@@ -1,0 +1,12 @@
+# Deno
+/.deno/
+deno.lock
+
+# Node (se houver)
+node_modules/
+
+# Environment
+.env
+
+# Logs
+*.log
