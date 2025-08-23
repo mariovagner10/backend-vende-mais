@@ -1,5 +1,5 @@
 # Dockerfile para o consumidor RabbitMQ
-FROM denoland/deno:1.35.4
+FROM denoland/deno:1.44.0
 
 
 # Diretório de trabalho
