@@ -7,10 +7,8 @@ WORKDIR /app
 # Copia todos os arquivos da pasta local para o diretório de trabalho do container
 COPY . .
 
-# Baixa e armazena em cache as dependências, permitindo acesso à rede.
-# A flag --allow-net é necessária para baixar módulos da internet.
-RUN deno cache deps.ts --allow-net
-
 # Comando para executar a aplicação
-# Garante as permissões de rede e variáveis de ambiente
-CMD ["run", "--allow-net", "--allow-env", "consumer.ts"]
+# Garante as permissões de rede e variáveis de ambiente.
+# A primeira execução de `deno run` vai baixar e cachear as dependências
+# A flag '--check' vai fazer o check de tipos, que é uma boa prática
+CMD ["run", "--allow-net", "--allow-env", "--check", "consumer.ts"]
