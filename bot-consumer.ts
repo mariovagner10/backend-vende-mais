@@ -1,4 +1,5 @@
-import { connect } from "https://deno.land/x/amqp@v0.26.0/mod.ts";
+import { connect } from "https://deno.land/x/amqp@v0.29.0/mod.ts";
+
 
 async function startConsumer() {
   const rabbitUrl = Deno.env.get("RABBITMQ_URL") || "";

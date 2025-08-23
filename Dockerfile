@@ -1,22 +1,21 @@
-# Imagem base com Deno
-FROM denoland/deno:1.38.3
+# Imagem base oficial do Deno
+FROM denoland/deno:1.46.3
 
-# Diretório de trabalho dentro do container
+# Definir diretório de trabalho
 WORKDIR /app
 
-# Copiar arquivos do projeto
+# Copiar apenas arquivos de dependência primeiro
+COPY deps.ts ./
+COPY deno.json ./
+
+# Fazer cache das dependências do Deno
+RUN deno cache --reload deps.ts || true
+
+# Copiar o restante do código
 COPY . .
 
-# Dar permissão ao Deno para rodar com acesso a rede, variáveis e arquivos
-# Também vamos permitir que o container execute scripts Deno
-ENV DENO_DIR=/deno-dir
+# Expor porta do serviço
+EXPOSE 8081
 
-# Instalar dependências (cache)
-RUN deno cache bot-consumer.ts
-
-# Expor a porta definida no .env
-ARG PORT=8081
-EXPOSE ${PORT}
-
-# Comando para rodar o bot consumidor
-CMD ["run", "--allow-net", "--allow-env", "--allow-read", "--unstable", "bot-consumer.ts"]
+# Comando padrão
+CMD ["run", "--allow-net", "--allow-env", "--allow-read", "bot-consumer.ts"]
