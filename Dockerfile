@@ -9,8 +9,8 @@ WORKDIR /app
 COPY . .
 
 # Comando para baixar e armazenar em cache as dependências.
-# A flag --allow-net é necessária para que o Deno possa buscar os módulos.
-RUN deno cache --allow-net /app/bot-consumer.ts
+# Não precisamos da flag --allow-net para este comando.
+RUN deno cache /app/bot-consumer.ts
 
 # --- STAGE 2: Run Stage ---
 # Usamos uma imagem "slim" para o runtime para uma imagem final menor
