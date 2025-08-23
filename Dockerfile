@@ -8,9 +8,9 @@ WORKDIR /app
 COPY . .
 
 # Baixa e armazena em cache as dependências, permitindo acesso à rede
-# A flag --allow-net é necessária para baixar módulos da internet.
 # A ordem dos argumentos foi ajustada aqui.
-RUN deno cache deps.ts --allow-net
+# Usamos '--' para garantir que as flags de permissão sejam passadas corretamente.
+RUN deno cache deps.ts -- --allow-net
 
 # Comando para executar a aplicação
 # Garante as permissões de rede e variáveis de ambiente
