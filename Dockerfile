@@ -1,21 +1,15 @@
-# Imagem base oficial do Deno
-FROM denoland/deno:1.46.3
+FROM denoland/deno:1.45.5
 
-# Definir diretório de trabalho
 WORKDIR /app
 
-# Copiar apenas arquivos de dependência primeiro
-COPY deps.ts ./
-COPY deno.json ./
+# Copia apenas os deps primeiro (para cache de build)
+COPY deps.ts .
 
-# Fazer cache das dependências do Deno
-RUN deno cache --reload deps.ts || true
+# Faz cache das dependências (vai baixar e compilar tudo)
+RUN deno cache deps.ts
 
-# Copiar o restante do código
+# Agora copia o resto do código
 COPY . .
 
-# Expor porta do serviço
-EXPOSE 8081
-
-# Comando padrão
-CMD ["run", "--allow-net", "--allow-env", "--allow-read", "bot-consumer.ts"]
+# Roda o app
+CMD ["run", "--allow-net", "--allow-env", "consumer.ts"]
