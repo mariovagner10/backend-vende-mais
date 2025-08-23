@@ -1,7 +1,7 @@
 import { connect } from "jsr:@nashaddams/amqp";
 
 async function startConsumer() {
-  const rabbitUrl = Deno.env.get("RABBITMQ_URL") || "localhost";
+  const rabbitUrl = Deno.env.get("RABBITMQ_URL") || "rabbitmq";
   const username = Deno.env.get("RABBITMQ_USERNAME") || "guest";
   const password = Deno.env.get("RABBITMQ_PASSWORD") || "guest";
 
