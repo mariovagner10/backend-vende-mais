@@ -7,7 +7,9 @@ const RABBITMQ_PASSWORD = Deno.env.get("RABBITMQ_PASSWORD") || "admin123";
 const QUEUE_NAME = "whatsapp_messages";
 const DLQ_NAME = "whatsapp_messages_failed";
 const WORKER_CONCURRENCY = parseInt(Deno.env.get("WORKER_CONCURRENCY") || "5");
-const BOT_HYBRID_URL = Deno.env.get("BOT_HYBRID_FUNCTION_URL") || "https://gythzfdqhubzzisordgq.supabase.co/functions/v1/bot-hybrid";
+const BOT_HYBRID_URL =
+  Deno.env.get("BOT_HYBRID_FUNCTION_URL") ||
+  "https://gythzfdqhubzzisordgq.supabase.co/functions/v1/bot-hybrid";
 const FETCH_TIMEOUT = 15000; // 15 segundos
 
 // Função para processar mensagens
@@ -19,9 +21,8 @@ async function processMessage(message: Message, channel: Channel) {
   }
 
   try {
-    // Decodifica base64
-    const rawBase64 = new TextDecoder().decode(message.body);
-    const raw = atob(rawBase64);
+    // Decodifica mensagem como JSON puro
+    const raw = new TextDecoder().decode(message.body);
     const payload: any = JSON.parse(raw);
 
     console.log("✅ Mensagem JSON válida:", payload);
@@ -42,7 +43,7 @@ async function processMessage(message: Message, channel: Channel) {
 
     if (!response.ok) throw new Error(`bot-hybrid retornou status ${response.status}`);
 
-    console.log("✅ Mensagem processada com sucesso:", payload.data.message.phone_number);
+    console.log("✅ Mensagem processada com sucesso:", payload.data?.message?.phone_number);
     channel.ack({ deliveryTag: message.deliveryTag });
 
   } catch (err: any) {
@@ -50,10 +51,16 @@ async function processMessage(message: Message, channel: Channel) {
 
     let payload: any;
     try {
-      payload = JSON.parse(atob(new TextDecoder().decode(message.body)));
+      // Tenta decodificar a mensagem original
+      payload = JSON.parse(new TextDecoder().decode(message.body));
       payload.retryCount = (payload.retryCount || 0) + 1;
     } catch {
-      payload = { retryCount: 1, failedAt: new Date().toISOString(), errorMessage: err.message };
+      // Se não conseguir decodificar, cria payload de erro
+      payload = {
+        retryCount: 1,
+        failedAt: new Date().toISOString(),
+        errorMessage: err.message,
+      };
     }
 
     if (payload.retryCount > 5) {
@@ -68,7 +75,10 @@ async function processMessage(message: Message, channel: Channel) {
       });
       channel.ack({ deliveryTag: message.deliveryTag });
     } else {
-      console.log(`🔄 Reenfileirando mensagem (tentativa ${payload.retryCount}) para fila:`, QUEUE_NAME);
+      console.log(
+        `🔄 Reenfileirando mensagem (tentativa ${payload.retryCount}) para fila:`,
+        QUEUE_NAME,
+      );
       await channel.publish({
         exchange: "",
         routingKey: QUEUE_NAME,
@@ -118,7 +128,7 @@ async function startConsumer() {
     } catch (error) {
       console.error("❌ Erro de conexão com RabbitMQ:", error.message);
       console.log("🔄 Tentando reconectar em 5 segundos...");
-      await new Promise(resolve => setTimeout(resolve, 5000));
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
 }
