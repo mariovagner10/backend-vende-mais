@@ -1,7 +1,7 @@
 import { connect } from "jsr:@nashaddams/amqp";
 
 async function startConsumer() {
-  const rabbitUrl = Deno.env.get("RABBITMQ_URL") || "rabbitmq";
+  const hostname = Deno.env.get("RABBITMQ_HOST") || "rabbitmq";
   const username = Deno.env.get("RABBITMQ_USERNAME") || "admin";
   const password = Deno.env.get("RABBITMQ_PASSWORD") || "admin123";
 
@@ -10,7 +10,7 @@ async function startConsumer() {
     try {
       console.log("🟡 Tentando conectar ao RabbitMQ...");
       // A biblioteca amqp usa `hostname` e não a URL completa
-      const connection = await connect({ hostname: rabbitUrl, username, password });
+      const connection = await connect({ hostname: hostname, username, password });
       const channel = await connection.openChannel();
 
       const queueName = "whatsapp_messages";

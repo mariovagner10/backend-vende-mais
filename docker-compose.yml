@@ -6,8 +6,8 @@ services:
     container_name: rabbitmq
     restart: unless-stopped
     ports:
-      - "5672:5672"   # Porta AMQP
-      - "15672:15672" # Porta Management Web UI
+      - "5672:5672"
+      - "15672:15672"
     environment:
       RABBITMQ_DEFAULT_USER: admin
       RABBITMQ_DEFAULT_PASS: admin123
@@ -17,13 +17,10 @@ services:
   rabbitmq_consumer:
     build: .
     container_name: consumidor-rabbit
-    # O network_mode: "host" não é mais necessário aqui.
-    # O Docker Compose gerencia a rede automaticamente.
     environment:
-      # O nome do serviço 'rabbitmq' é resolvido automaticamente.
-      # A porta 5672 é a padrão, então não precisa ser explícita.
-      - RABBITMQ_URL=amqp://admin:admin123@rabbitmq:5672
-    # Depende do serviço 'rabbitmq'
+      - RABBITMQ_HOST=rabbitmq
+      - RABBITMQ_USERNAME=admin
+      - RABBITMQ_PASSWORD=admin123
     depends_on:
       - rabbitmq
     restart: unless-stopped
