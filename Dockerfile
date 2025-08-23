@@ -1,15 +1,20 @@
-FROM denoland/deno:1.45.5
+# Dockerfile para o consumidor RabbitMQ
+FROM denoland/deno:1.46.5
 
+# Diretório de trabalho
 WORKDIR /app
 
-# Copia apenas os deps primeiro (para cache de build)
+# Copia apenas as dependências primeiro para aproveitar o cache do Docker
 COPY deps.ts .
 
-# Faz cache das dependências (vai baixar e compilar tudo)
+# Faz cache das dependências do Deno
 RUN deno cache deps.ts
 
-# Agora copia o resto do código
+# Copia todo o restante do código
 COPY . .
 
-# Roda o app
-CMD ["run", "--allow-net", "--allow-env", "consumer.ts"]
+# Expor variáveis de ambiente do .env (opcional, depende do seu setup)
+# ENV RABBITMQ_URL=amqp://guest:guest@rabbitmq:5672/
+
+# Comando padrão para rodar o consumidor
+CMD ["run", "--allow-net", "--allow-env", "bot-consumer.ts"]

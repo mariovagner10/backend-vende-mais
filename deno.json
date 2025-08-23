@@ -1,0 +1,10 @@
+{
+  "compilerOptions": {
+    "lib": ["deno.ns", "dom"],
+    "types": ["deno.ns"]
+  },
+  "tasks": {
+    "dev": "deno run --allow-all src/index.ts",
+    "cache": "deno cache src/index.ts"
+  }
+}
