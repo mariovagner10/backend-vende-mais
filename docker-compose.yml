@@ -27,3 +27,6 @@ services:
     depends_on:
       - rabbitmq
     restart: unless-stopped
+
+volumes:
+  rabbitmq_data:
