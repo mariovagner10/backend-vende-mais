@@ -5,10 +5,9 @@ FROM denoland/deno:1.44.0
 WORKDIR /app
 
 # Copia todos os arquivos da pasta local para o diretório de trabalho do container
+# O "ponto" no final indica para copiar o conteúdo do diretório atual.
 COPY . .
 
-# Comando para executar a aplicação
-# Garante as permissões de rede e variáveis de ambiente.
-# A primeira execução de `deno run` vai baixar e cachear as dependências
-# A flag '--check' vai fazer o check de tipos, que é uma boa prática
-CMD ["run", "--allow-net", "--allow-env", "--check", "./consumer.ts"]
+# Comando para executar a aplicação, garantindo todas as permissões necessárias
+# Colocamos o caminho do arquivo completo a partir do WORKDIR.
+CMD ["deno", "run", "--allow-net", "--allow-env", "--check", "/app/consumer.ts"]

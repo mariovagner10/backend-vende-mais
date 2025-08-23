@@ -9,4 +9,4 @@ services:
       - RABBITMQ_URL=${RABBITMQ_URL}
       - RABBITMQ_USERNAME=${RABBITMQ_USERNAME}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
-    command: ["deno", "run", "--allow-net", "--allow-env", "--check", "./consumer.ts"]
+    restart: unless-stopped
