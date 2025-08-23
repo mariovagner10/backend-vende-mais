@@ -12,11 +12,18 @@ const FETCH_TIMEOUT = 15000; // 15 segundos
 
 // Função para processar mensagens
 async function processMessage(message: Message, channel: Channel) {
-  // Logs detalhados da mensagem
-  console.log("📦 Mensagem recebida raw (bytes):", message.body);
-  console.log("📦 Mensagem recebida raw (base64):", btoa(String.fromCharCode(...message.body)));
+  // Checa se existe conteúdo
+  if (!message.content) {
+    console.warn("⚠️ Mensagem sem conteúdo (content undefined), ignorando...");
+    channel.nack({ deliveryTag: message.deliveryTag, requeue: false });
+    return;
+  }
 
-  const raw = new TextDecoder().decode(message.body);
+  console.log("➡️ Mensagem recebida do consumer");
+  console.log("📦 Mensagem recebida raw (bytes):", message.content);
+  console.log("📦 Mensagem recebida raw (base64):", btoa(String.fromCharCode(...message.content)));
+
+  const raw = new TextDecoder().decode(message.content);
   console.log("📜 Mensagem decodificada (string):", raw);
 
   let payload: any;
@@ -104,7 +111,6 @@ async function startConsumer() {
       channel.consume({ queue: QUEUE_NAME, noAck: false }, async (message) => {
         if (!message) return;
 
-        console.log("➡️ Mensagem recebida do consumer");
         const worker = processMessage(message, channel);
         activeWorkers.push(worker);
 
@@ -116,7 +122,7 @@ async function startConsumer() {
         }
       });
 
-      await new Promise(() => {});
+      await new Promise(() => {}); // Mantém o consumer ativo
     } catch (error) {
       console.error("❌ Erro de conexão com RabbitMQ:", error.message);
       console.log("🔄 Tentando reconectar em 5 segundos...");
