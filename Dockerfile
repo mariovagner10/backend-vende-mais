@@ -11,4 +11,4 @@ COPY . .
 # Garante as permissões de rede e variáveis de ambiente.
 # A primeira execução de `deno run` vai baixar e cachear as dependências
 # A flag '--check' vai fazer o check de tipos, que é uma boa prática
-CMD ["run", "--allow-net", "--allow-env", "--check", "consumer.ts"]
+CMD ["run", "--allow-net", "--allow-env", "--check", "./consumer.ts"]
