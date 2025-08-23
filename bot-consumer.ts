@@ -12,36 +12,22 @@ const FETCH_TIMEOUT = 15000; // 15 segundos
 
 // Função para processar mensagens
 async function processMessage(message: Message, channel: Channel) {
-  // Checa se existe conteúdo
-  if (!message.content) {
-    console.warn("⚠️ Mensagem sem conteúdo (content undefined), ignorando...");
+  if (!message.body) {
+    console.warn("⚠️ Mensagem sem conteúdo (body undefined), ignorando...");
     channel.nack({ deliveryTag: message.deliveryTag, requeue: false });
     return;
   }
 
-  console.log("➡️ Mensagem recebida do consumer");
-  console.log("📦 Mensagem recebida raw (bytes):", message.content);
-  console.log("📦 Mensagem recebida raw (base64):", btoa(String.fromCharCode(...message.content)));
-
-  const raw = new TextDecoder().decode(message.content);
-  console.log("📜 Mensagem decodificada (string):", raw);
-
-  let payload: any;
   try {
-    payload = JSON.parse(raw);
-  } catch (err) {
-    console.warn("⚠️ Mensagem inválida (não JSON):", raw);
-    console.error("⚠️ Erro parse JSON:", err);
-    channel.nack({ deliveryTag: message.deliveryTag, requeue: false });
-    return;
-  }
+    // Decodifica base64
+    const rawBase64 = new TextDecoder().decode(message.body);
+    const raw = atob(rawBase64);
+    const payload: any = JSON.parse(raw);
 
-  console.log("✅ Mensagem JSON válida:", payload);
-  payload.retryCount = payload.retryCount || 0;
+    console.log("✅ Mensagem JSON válida:", payload);
+    payload.retryCount = payload.retryCount || 0;
 
-  try {
-    console.log(`📩 Processando mensagem do petshop ${payload.petshopId}:`, payload.data.message.phone_number);
-
+    // Processa mensagem via bot-hybrid
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
@@ -56,19 +42,25 @@ async function processMessage(message: Message, channel: Channel) {
 
     if (!response.ok) throw new Error(`bot-hybrid retornou status ${response.status}`);
 
-    console.log("✅ Mensagem processada com sucesso pelo bot-hybrid:", payload.data.message.phone_number);
+    console.log("✅ Mensagem processada com sucesso:", payload.data.message.phone_number);
     channel.ack({ deliveryTag: message.deliveryTag });
-  } catch (err) {
+
+  } catch (err: any) {
     console.error("❌ Erro processando mensagem:", err);
 
-    payload.retryCount++;
+    let payload: any;
+    try {
+      payload = JSON.parse(atob(new TextDecoder().decode(message.body)));
+      payload.retryCount = (payload.retryCount || 0) + 1;
+    } catch {
+      payload = { retryCount: 1, failedAt: new Date().toISOString(), errorMessage: err.message };
+    }
 
     if (payload.retryCount > 5) {
-      console.warn("⚠️ Mensagem enviada para DLQ após múltiplas tentativas:", payload.data.message.phone_number);
+      console.warn("⚠️ Mensagem enviada para DLQ:", payload.data?.message?.phone_number || "N/A");
       payload.failedAt = new Date().toISOString();
       payload.errorMessage = err.message;
 
-      console.log("📥 Publicando mensagem na DLQ:", DLQ_NAME);
       await channel.publish({
         exchange: "",
         routingKey: DLQ_NAME,
