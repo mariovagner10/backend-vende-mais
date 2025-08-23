@@ -1,14 +1,11 @@
 import { connect } from "./deps.ts";
 
-
-
 async function startConsumer() {
-  const rabbitUrl = Deno.env.get("RABBITMQ_URL") || "";
-  const connection = await connect({
-    hostname: rabbitUrl,
-    username: Deno.env.get("RABBITMQ_USERNAME"),
-    password: Deno.env.get("RABBITMQ_PASSWORD")
-  });
+  const rabbitUrl = Deno.env.get("RABBITMQ_URL") || "localhost";
+  const username = Deno.env.get("RABBITMQ_USERNAME") || "guest";
+  const password = Deno.env.get("RABBITMQ_PASSWORD") || "guest";
+
+  const connection = await connect({ hostname: rabbitUrl, username, password });
   const channel = await connection.openChannel();
 
   const queueName = "whatsapp_messages";
@@ -21,7 +18,6 @@ async function startConsumer() {
       const payload = JSON.parse(new TextDecoder().decode(message.body));
       console.log("📩 Mensagem recebida da fila:", payload);
 
-      // Chama o endpoint local de processamento do bot híbrido
       await processIncomingMessage(payload);
 
       channel.ack({ deliveryTag: message.deliveryTag });
@@ -33,23 +29,16 @@ async function startConsumer() {
 }
 
 async function processIncomingMessage(message: any) {
-  // Endpoint do seu bot híbrido (já criado)
-  const req = new Request("https://gythzfdqhubzzisordgq.supabase.co/functions/v1/bot-hybrid", {
-    method: "POST",
-    body: JSON.stringify(message),
-    headers: { "Content-Type": "application/json" },
-  });
+  const req = new Request(
+    "https://gythzfdqhubzzisordgq.supabase.co/functions/v1/bot-hybrid",
+    {
+      method: "POST",
+      body: JSON.stringify(message),
+      headers: { "Content-Type": "application/json" },
+    }
+  );
   const res = await fetch(req);
   if (!res.ok) console.error("Erro no endpoint de processamento:", await res.text());
 }
 
 startConsumer();
-
-
-
-
-
-
-
-
-
