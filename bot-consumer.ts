@@ -12,22 +12,29 @@ const FETCH_TIMEOUT = 15000; // 15 segundos
 
 // Função para processar mensagens
 async function processMessage(message: Message, channel: Channel) {
+  // Logs detalhados da mensagem
+  console.log("📦 Mensagem recebida raw (bytes):", message.body);
+  console.log("📦 Mensagem recebida raw (base64):", btoa(String.fromCharCode(...message.body)));
+
   const raw = new TextDecoder().decode(message.body);
+  console.log("📜 Mensagem decodificada (string):", raw);
+
   let payload: any;
   try {
     payload = JSON.parse(raw);
-  } catch {
+  } catch (err) {
     console.warn("⚠️ Mensagem inválida (não JSON):", raw);
+    console.error("⚠️ Erro parse JSON:", err);
     channel.nack({ deliveryTag: message.deliveryTag, requeue: false });
     return;
   }
 
+  console.log("✅ Mensagem JSON válida:", payload);
   payload.retryCount = payload.retryCount || 0;
 
   try {
     console.log(`📩 Processando mensagem do petshop ${payload.petshopId}:`, payload.data.message.phone_number);
 
-    // Timeout fetch
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
@@ -51,14 +58,23 @@ async function processMessage(message: Message, channel: Channel) {
 
     if (payload.retryCount > 5) {
       console.warn("⚠️ Mensagem enviada para DLQ após múltiplas tentativas:", payload.data.message.phone_number);
-      // Adiciona info de falha
       payload.failedAt = new Date().toISOString();
       payload.errorMessage = err.message;
-      await channel.publish({ exchange: "", routingKey: DLQ_NAME, body: new TextEncoder().encode(JSON.stringify(payload)) });
+
+      console.log("📥 Publicando mensagem na DLQ:", DLQ_NAME);
+      await channel.publish({
+        exchange: "",
+        routingKey: DLQ_NAME,
+        body: new TextEncoder().encode(JSON.stringify(payload)),
+      });
       channel.ack({ deliveryTag: message.deliveryTag });
     } else {
-      console.log(`🔄 Reenfileirando mensagem (tentativa ${payload.retryCount})`);
-      await channel.publish({ exchange: "", routingKey: QUEUE_NAME, body: new TextEncoder().encode(JSON.stringify(payload)) });
+      console.log(`🔄 Reenfileirando mensagem (tentativa ${payload.retryCount}) para fila:`, QUEUE_NAME);
+      await channel.publish({
+        exchange: "",
+        routingKey: QUEUE_NAME,
+        body: new TextEncoder().encode(JSON.stringify(payload)),
+      });
       channel.ack({ deliveryTag: message.deliveryTag });
     }
   }
@@ -78,7 +94,6 @@ async function startConsumer() {
       const channel: Channel = await connection.openChannel();
       console.log("🟢 Conectado ao RabbitMQ");
 
-      // Declara filas
       await channel.declareQueue({ queue: QUEUE_NAME, durable: true });
       await channel.declareQueue({ queue: DLQ_NAME, durable: true });
 
@@ -89,19 +104,18 @@ async function startConsumer() {
       channel.consume({ queue: QUEUE_NAME, noAck: false }, async (message) => {
         if (!message) return;
 
+        console.log("➡️ Mensagem recebida do consumer");
         const worker = processMessage(message, channel);
         activeWorkers.push(worker);
 
         if (activeWorkers.length >= WORKER_CONCURRENCY) {
           await Promise.race(activeWorkers);
-          // Remove workers finalizados
           for (let i = activeWorkers.length - 1; i >= 0; i--) {
             if (activeWorkers[i].finally) activeWorkers.splice(i, 1);
           }
         }
       });
 
-      // Mantém consumer ativo
       await new Promise(() => {});
     } catch (error) {
       console.error("❌ Erro de conexão com RabbitMQ:", error.message);
