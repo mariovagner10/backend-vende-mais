@@ -2,28 +2,41 @@ import { connect } from "jsr:@nashaddams/amqp";
 
 async function startConsumer() {
   const rabbitUrl = Deno.env.get("RABBITMQ_URL") || "rabbitmq";
-  const username = Deno.env.get("RABBITMQ_USERNAME") || "guest";
-  const password = Deno.env.get("RABBITMQ_PASSWORD") || "guest";
+  const username = Deno.env.get("RABBITMQ_USERNAME") || "admin";
+  const password = Deno.env.get("RABBITMQ_PASSWORD") || "admin123";
 
-  const connection = await connect({ hostname: rabbitUrl, username, password });
-  const channel = await connection.openChannel();
-
-  const queueName = "whatsapp_messages";
-  await channel.declareQueue({ queue: queueName, durable: true });
-
-  console.log("🟢 Bot consumidor conectado na fila:", queueName);
-
-  for await (const message of channel.consume({ queue: queueName, noAck: false })) {
+  // Loop para tentar reconectar em caso de falha.
+  while (true) {
     try {
-      const payload = JSON.parse(new TextDecoder().decode(message.body));
-      console.log("📩 Mensagem recebida da fila:", payload);
+      console.log("🟡 Tentando conectar ao RabbitMQ...");
+      // A biblioteca amqp usa `hostname` e não a URL completa
+      const connection = await connect({ hostname: rabbitUrl, username, password });
+      const channel = await connection.openChannel();
 
-      await processIncomingMessage(payload);
+      const queueName = "whatsapp_messages";
+      await channel.declareQueue({ queue: queueName, durable: true });
 
-      channel.ack({ deliveryTag: message.deliveryTag });
+      console.log("🟢 Bot consumidor conectado na fila:", queueName);
+
+      for await (const message of channel.consume({ queue: queueName, noAck: false })) {
+        try {
+          const payload = JSON.parse(new TextDecoder().decode(message.body));
+          console.log("📩 Mensagem recebida da fila:", payload);
+
+          await processIncomingMessage(payload);
+
+          channel.ack({ deliveryTag: message.deliveryTag });
+        } catch (error) {
+          console.error("❌ Erro processando mensagem da fila:", error);
+          channel.nack({ deliveryTag: message.deliveryTag, requeue: true });
+        }
+      }
+
     } catch (error) {
-      console.error("❌ Erro processando mensagem da fila:", error);
-      channel.nack({ deliveryTag: message.deliveryTag, requeue: true });
+      console.error("❌ Erro de conexão com o RabbitMQ:", error.message);
+      console.log("🔄 Tentando reconectar em 5 segundos...");
+      // Espera 5 segundos antes de tentar novamente
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
   }
 }
