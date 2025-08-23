@@ -5,10 +5,6 @@ FROM denoland/deno:1.44.0 as build-stage
 # Define o diretório de trabalho
 WORKDIR /app
 
-# Copia os arquivos de configuração de dependências
-COPY deno.json deno.json
-COPY import_map.json import_map.json
-
 # Copia todos os arquivos da pasta local para o diretório de trabalho do container
 COPY . .
 
