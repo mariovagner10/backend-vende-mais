@@ -1,4 +1,4 @@
-import { connect, Channel, Connection, Message } from "https://deno.land/x/amqp@v0.20.0/mod.ts";
+import { connect, Channel, Connection } from "jsr:@nashaddams/amqp";
 
 // Configurações RabbitMQ
 const RABBITMQ_HOST = Deno.env.get("RABBITMQ_HOST") || "127.0.0.1";
@@ -12,41 +12,41 @@ const BOT_HYBRID_URL =
   "https://gythzfdqhubzzisordgq.supabase.co/functions/v1/bot-hybrid";
 const FETCH_TIMEOUT = 15000; // 15 segundos
 
-// Função para processar mensagens
-async function processMessage(message: Message, channel: Channel) {
-  if (!message.body) {
-    console.warn("⚠️ Mensagem sem conteúdo (body undefined), ignorando...");
-    channel.nack({ deliveryTag: message.deliveryTag, requeue: false });
-    return;
-  }
-  try {
-    // ✅ Recebe o payload completo da fila
-    const raw = new TextDecoder().decode(message.body);
-    const payload: any = JSON.parse(raw); // O payload é o 'messageData' completo
-    console.log("✅ Mensagem JSON válida:", payload);
-    // 🔹 NOVO: Envia o objeto 'payload' completo para o bot-hybrid
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-    const response = await fetch(BOT_HYBRID_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload), // ✅ AGORA ENVIA O OBJETO COMPLETO QUE VEIO DA FILA
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!response.ok) throw new Error(`bot-hybrid retornou status ${response.status}`);
-    console.log("✅ Mensagem processada com sucesso para:", payload.phone_number);
-    channel.ack({ deliveryTag: message.deliveryTag });
-  } catch (err: any) {
+// Função para processar mensagens - REVISADA PARA A NOVA API
+async function processMessage(args: any, data: Uint8Array, channel: Channel) {
+  // ✅ O 'data' agora é o corpo da mensagem
+  if (!data || data.length === 0) {
+    console.warn("⚠️ Mensagem sem conteúdo (body undefined), ignorando...");
+    channel.nack({ deliveryTag: args.deliveryTag, requeue: false });
+    return;
+  }
+  try {
+    const raw = new TextDecoder().decode(data);
+    const payload: any = JSON.parse(raw);
+    console.log("✅ Mensagem JSON válida:", payload);
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+    const response = await fetch(BOT_HYBRID_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) throw new Error(`bot-hybrid retornou status ${response.status}`);
+
+    console.log("✅ Mensagem processada com sucesso para:", payload.phone_number);
+    channel.ack({ deliveryTag: args.deliveryTag }); // ✅ Usa args.deliveryTag
+  } catch (err: any) {
     console.error("❌ Erro processando mensagem:", err);
 
     let payload: any;
     try {
-      // Tenta decodificar a mensagem original
-      payload = JSON.parse(new TextDecoder().decode(message.body));
+      payload = JSON.parse(new TextDecoder().decode(data)); // ✅ Usa 'data'
       payload.retryCount = (payload.retryCount || 0) + 1;
     } catch {
-      // Se não conseguir decodificar, cria payload de erro
       payload = {
         retryCount: 1,
         failedAt: new Date().toISOString(),
@@ -58,13 +58,12 @@ async function processMessage(message: Message, channel: Channel) {
       console.warn("⚠️ Mensagem enviada para DLQ:", payload.data?.message?.phone_number || "N/A");
       payload.failedAt = new Date().toISOString();
       payload.errorMessage = err.message;
-
       await channel.publish({
         exchange: "",
         routingKey: DLQ_NAME,
         body: new TextEncoder().encode(JSON.stringify(payload)),
       });
-      channel.ack({ deliveryTag: message.deliveryTag });
+      channel.ack({ deliveryTag: args.deliveryTag }); // ✅ Usa args.deliveryTag
     } else {
       console.log(
         `🔄 Reenfileirando mensagem (tentativa ${payload.retryCount}) para fila:`,
@@ -75,7 +74,7 @@ async function processMessage(message: Message, channel: Channel) {
         routingKey: QUEUE_NAME,
         body: new TextEncoder().encode(JSON.stringify(payload)),
       });
-      channel.ack({ deliveryTag: message.deliveryTag });
+      channel.ack({ deliveryTag: args.deliveryTag }); // ✅ Usa args.deliveryTag
     }
   }
 }
@@ -101,10 +100,13 @@ async function startConsumer() {
 
       const activeWorkers: Promise<void>[] = [];
 
-      channel.consume({ queue: QUEUE_NAME, noAck: false }, async (message) => {
-        if (!message) return;
-
-        const worker = processMessage(message, channel);
+      // ✅ O callback agora recebe (args, props, data)
+      channel.consume({ queue: QUEUE_NAME, noAck: false }, async (args, props, data) => {
+        if (!args || !data) {
+          // Mensagem sem corpo ou argumentos é ignorada.
+          return;
+        }
+        const worker = processMessage(args, data, channel);
         activeWorkers.push(worker);
 
         if (activeWorkers.length >= WORKER_CONCURRENCY) {
