@@ -34,6 +34,12 @@ async function startConsumer() {
 
       // O callback agora lida com todo o processamento
       channel.consume({ queue: QUEUE_NAME, noAck: false }, async (args, props, data) => {
+        // ✅ NOVO: Adicione estes logs para depuração
+        console.log("--- DEBUG: Recebendo mensagem ---");
+        console.log("Argumentos (args):", args);
+        console.log("Corpo da mensagem (data):", data);
+        console.log("-----------------------------------");
+       
         // ✅ O corpo da mensagem é a variável 'data'
         if (!data || data.length === 0) {
           console.warn("⚠️ Mensagem sem conteúdo, ignorando...");
