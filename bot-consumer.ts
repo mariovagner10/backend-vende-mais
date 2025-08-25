@@ -4,6 +4,7 @@ import { connect, Channel, Connection } from "jsr:@nashaddams/amqp";
 const RABBITMQ_HOST = Deno.env.get("RABBITMQ_HOST") || "127.0.0.1";
 const RABBITMQ_USERNAME = Deno.env.get("RABBITMQ_USERNAME") || "admin";
 const RABBITMQ_PASSWORD = Deno.env.get("RABBITMQ_PASSWORD") || "admin123";
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 const QUEUE_NAME = "whatsapp_messages";
 const DLQ_NAME = "whatsapp_messages_failed";
 const BOT_HYBRID_URL =
@@ -56,7 +57,11 @@ async function startConsumer() {
           const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
           const response = await fetch(BOT_HYBRID_URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+            "Content-Type": "application/json",
+            // ✅ Adicione esta linha
+            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+            },
             body: JSON.stringify(payload),
             signal: controller.signal,
           });
