@@ -14,39 +14,30 @@ const FETCH_TIMEOUT = 15000; // 15 segundos
 
 // Função para processar mensagens
 async function processMessage(message: Message, channel: Channel) {
-  if (!message.body) {
-    console.warn("⚠️ Mensagem sem conteúdo (body undefined), ignorando...");
-    channel.nack({ deliveryTag: message.deliveryTag, requeue: false });
-    return;
-  }
-
-  try {
-    // Decodifica mensagem como JSON puro
-    const raw = new TextDecoder().decode(message.body);
-    const payload: any = JSON.parse(raw);
-
-    console.log("✅ Mensagem JSON válida:", payload);
-    payload.retryCount = payload.retryCount || 0;
-
-    // Processa mensagem via bot-hybrid
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-
-    const response = await fetch(BOT_HYBRID_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload.data),
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeout);
-
-    if (!response.ok) throw new Error(`bot-hybrid retornou status ${response.status}`);
-
-    console.log("✅ Mensagem processada com sucesso:", payload.data?.message?.phone_number);
-    channel.ack({ deliveryTag: message.deliveryTag });
-
-  } catch (err: any) {
+  if (!message.body) {
+    console.warn("⚠️ Mensagem sem conteúdo (body undefined), ignorando...");
+    channel.nack({ deliveryTag: message.deliveryTag, requeue: false });
+    return;
+  }
+  try {
+    // ✅ Recebe o payload completo da fila
+    const raw = new TextDecoder().decode(message.body);
+    const payload: any = JSON.parse(raw); // O payload é o 'messageData' completo
+    console.log("✅ Mensagem JSON válida:", payload);
+    // 🔹 NOVO: Envia o objeto 'payload' completo para o bot-hybrid
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+    const response = await fetch(BOT_HYBRID_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload), // ✅ AGORA ENVIA O OBJETO COMPLETO QUE VEIO DA FILA
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!response.ok) throw new Error(`bot-hybrid retornou status ${response.status}`);
+    console.log("✅ Mensagem processada com sucesso para:", payload.phone_number);
+    channel.ack({ deliveryTag: message.deliveryTag });
+  } catch (err: any) {
     console.error("❌ Erro processando mensagem:", err);
 
     let payload: any;
