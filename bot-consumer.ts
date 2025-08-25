@@ -6,78 +6,12 @@ const RABBITMQ_USERNAME = Deno.env.get("RABBITMQ_USERNAME") || "admin";
 const RABBITMQ_PASSWORD = Deno.env.get("RABBITMQ_PASSWORD") || "admin123";
 const QUEUE_NAME = "whatsapp_messages";
 const DLQ_NAME = "whatsapp_messages_failed";
-const WORKER_CONCURRENCY = parseInt(Deno.env.get("WORKER_CONCURRENCY") || "5");
 const BOT_HYBRID_URL =
   Deno.env.get("BOT_HYBRID_FUNCTION_URL") ||
   "https://gythzfdqhubzzisordgq.supabase.co/functions/v1/bot-hybrid";
 const FETCH_TIMEOUT = 15000; // 15 segundos
 
-// Função para processar mensagens - REVISADA PARA A NOVA API
-async function processMessage(args: any, data: Uint8Array, channel: Channel) {
-  // ✅ O 'data' agora é o corpo da mensagem
-  if (!data || data.length === 0) {
-    console.warn("⚠️ Mensagem sem conteúdo (body undefined), ignorando...");
-    channel.nack({ deliveryTag: args.deliveryTag, requeue: false });
-    return;
-  }
-  try {
-    const raw = new TextDecoder().decode(data);
-    const payload: any = JSON.parse(raw);
-    console.log("✅ Mensagem JSON válida:", payload);
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
-    const response = await fetch(BOT_HYBRID_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) throw new Error(`bot-hybrid retornou status ${response.status}`);
-
-    console.log("✅ Mensagem processada com sucesso para:", payload.phone_number);
-    channel.ack({ deliveryTag: args.deliveryTag }); // ✅ Usa args.deliveryTag
-  } catch (err: any) {
-    console.error("❌ Erro processando mensagem:", err);
-
-    let payload: any;
-    try {
-      payload = JSON.parse(new TextDecoder().decode(data)); // ✅ Usa 'data'
-      payload.retryCount = (payload.retryCount || 0) + 1;
-    } catch {
-      payload = {
-        retryCount: 1,
-        failedAt: new Date().toISOString(),
-        errorMessage: err.message,
-      };
-    }
-
-    if (payload.retryCount > 5) {
-      console.warn("⚠️ Mensagem enviada para DLQ:", payload.data?.message?.phone_number || "N/A");
-      payload.failedAt = new Date().toISOString();
-      payload.errorMessage = err.message;
-      await channel.publish({
-        exchange: "",
-        routingKey: DLQ_NAME,
-        body: new TextEncoder().encode(JSON.stringify(payload)),
-      });
-      channel.ack({ deliveryTag: args.deliveryTag }); // ✅ Usa args.deliveryTag
-    } else {
-      console.log(
-        `🔄 Reenfileirando mensagem (tentativa ${payload.retryCount}) para fila:`,
-        QUEUE_NAME,
-      );
-      await channel.publish({
-        exchange: "",
-        routingKey: QUEUE_NAME,
-        body: new TextEncoder().encode(JSON.stringify(payload)),
-      });
-      channel.ack({ deliveryTag: args.deliveryTag }); // ✅ Usa args.deliveryTag
-    }
-  }
-}
+// A função 'processMessage' e a lógica de concorrência foram movidas para cá.
 
 // Inicializa consumer
 async function startConsumer() {
@@ -98,21 +32,73 @@ async function startConsumer() {
 
       console.log("📥 Consumindo fila:", QUEUE_NAME);
 
-      const activeWorkers: Promise<void>[] = [];
-
-      // ✅ O callback agora recebe (args, props, data)
+      // O callback agora lida com todo o processamento
       channel.consume({ queue: QUEUE_NAME, noAck: false }, async (args, props, data) => {
-        if (!args || !data) {
-          // Mensagem sem corpo ou argumentos é ignorada.
+        // ✅ O corpo da mensagem é a variável 'data'
+        if (!data || data.length === 0) {
+          console.warn("⚠️ Mensagem sem conteúdo, ignorando...");
+          channel.nack({ deliveryTag: args.deliveryTag, requeue: false });
           return;
         }
-        const worker = processMessage(args, data, channel);
-        activeWorkers.push(worker);
 
-        if (activeWorkers.length >= WORKER_CONCURRENCY) {
-          await Promise.race(activeWorkers);
-          for (let i = activeWorkers.length - 1; i >= 0; i--) {
-            if (activeWorkers[i].finally) activeWorkers.splice(i, 1);
+        try {
+          const raw = new TextDecoder().decode(data);
+          const payload: any = JSON.parse(raw);
+          console.log("✅ Mensagem JSON válida:", payload);
+
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
+          const response = await fetch(BOT_HYBRID_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+
+          if (!response.ok) {
+            throw new Error(`bot-hybrid retornou status ${response.status}`);
+          }
+
+          console.log("✅ Mensagem processada com sucesso para:", payload.phone_number);
+          channel.ack({ deliveryTag: args.deliveryTag });
+
+        } catch (err: any) {
+          console.error("❌ Erro processando mensagem:", err);
+
+          let payload: any;
+          try {
+            payload = JSON.parse(new TextDecoder().decode(data));
+            payload.retryCount = (payload.retryCount || 0) + 1;
+          } catch {
+            payload = {
+              retryCount: 1,
+              failedAt: new Date().toISOString(),
+              errorMessage: err.message,
+            };
+          }
+
+          if (payload.retryCount > 5) {
+            console.warn("⚠️ Mensagem enviada para DLQ:", payload.data?.message?.phone_number || "N/A");
+            payload.failedAt = new Date().toISOString();
+            payload.errorMessage = err.message;
+            await channel.publish({
+              exchange: "",
+              routingKey: DLQ_NAME,
+              body: new TextEncoder().encode(JSON.stringify(payload)),
+            });
+            channel.ack({ deliveryTag: args.deliveryTag });
+          } else {
+            console.log(
+              `🔄 Reenfileirando mensagem (tentativa ${payload.retryCount}) para fila:`,
+              QUEUE_NAME,
+            );
+            await channel.publish({
+              exchange: "",
+              routingKey: QUEUE_NAME,
+              body: new TextEncoder().encode(JSON.stringify(payload)),
+            });
+            channel.ack({ deliveryTag: args.deliveryTag });
           }
         }
       });
